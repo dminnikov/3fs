@@ -1,0 +1,81 @@
+name: Coverage
+
+on:
+  push:
+    paths:
+      - '.github/**'
+      - 'cmake/**'
+      - 'include/**'
+      - 'scripts/**'
+      - 'src/**'
+      - 'test/**'
+      - '**/CMakeLists.txt'
+      - '**/.gitmodules'
+  pull_request:
+    paths:
+      - '.github/**'
+      - 'cmake/**'
+      - 'include/**'
+      - 'scripts/**'
+      - 'src/**'
+      - 'test/**'
+      - '**/CMakeLists.txt'
+      - '**/.gitmodules'
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref_name }}-${{ github.ref_type == 'branch' && github.sha }}-${{ github.event_name == 'workflow_dispatch' }}-${{ github.event_name == 'schedule' }}-${{ github.event.schedule }}
+  cancel-in-progress: true
+
+jobs:
+  codecov:
+    runs-on: ubuntu-22.04
+
+    steps:
+      - name: Setup CMake and Ninja
+        uses: lukka/get-cmake@latest
+
+      - name: Create Build Environment
+        run: |
+          sudo locale-gen en_US.UTF-8
+          sudo locale-gen fi_FI.UTF-8
+          sudo update-locale
+          sudo locale -a
+
+          sudo apt-get install -yq lcov
+
+          mkdir ${{ runner.workspace }}/build
+          mkdir ${{ runner.workspace }}/report
+
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Run CMake
+        working-directory: ${{ runner.workspace }}/build
+        run: |
+          cmake -G Ninja -DCMAKE_BUILD_TYPE=Debug \
+                -DCMAKE_CXX_STANDARD=20 \
+                -DSCN_BUILD_LOCALIZED_TESTS=ON -DSCN_COVERAGE=ON \
+                -DSCN_BENCHMARKS=OFF -DSCN_EXAMPLES=OFF \
+                $GITHUB_WORKSPACE
+
+      - name: Build
+        working-directory: ${{ runner.workspace }}/build
+        run: |
+          cmake --build . -- -k 0
+
+      - name: Generate Coverage Report
+        working-directory: ${{ runner.workspace }}/build
+        run: |
+          ./coverage.sh
+          cp coverage-filtered.info ${{ runner.workspace }}/report/coverage.info
+
+      - name: Upload Coverage Report
+        uses: codecov/codecov-action@v3
+        with:
+          directory: ${{ runner.workspace }}/report
+          fail_ci_if_error: true
+          verbose: true
+          token: ${{ secrets.CODECOV_TOKEN }}

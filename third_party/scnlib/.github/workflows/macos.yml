@@ -1,0 +1,77 @@
+name: macOS
+
+on:
+  push:
+    branches:
+      - master
+      - dev
+    paths:
+      - '.github/**'
+      - 'benchmark/**'
+      - 'cmake/**'
+      - 'examples/**'
+      - 'include/**'
+      - 'src/**'
+      - 'test/**'
+      - '**/CMakeLists.txt'
+      - '**/.gitmodules'
+  pull_request:
+    branches:
+      - master
+      - dev
+    paths:
+      - '.github/**'
+      - 'benchmark/**'
+      - 'cmake/**'
+      - 'examples/**'
+      - 'include/**'
+      - 'src/**'
+      - 'test/**'
+      - '**/CMakeLists.txt'
+      - '**/.gitmodules'
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref_name }}-${{ github.ref_type == 'branch' && github.sha }}-${{ github.event_name == 'workflow_dispatch' }}-${{ github.event_name == 'schedule' }}-${{ github.event.schedule }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: macos-${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ 12, 11 ]
+        cxx: [ clang++, g++-12, g++-11, g++-10 ]
+        std: [ 11, 20 ]
+        exclude:
+          # Not available
+          - os: 12
+            cxx: g++-10
+          - os: 12
+            cxx: g++-9
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Create Build Environment
+        run: |
+          mkdir ${{ runner.workspace }}/build
+
+      - name: Run CMake
+        working-directory: ${{ runner.workspace }}/build
+        env:
+          CXX: ${{ matrix.cxx }}
+        run: |
+          cmake -DSCN_WERROR=ON -DCMAKE_CXX_STANDARD=${{ matrix.std }} $GITHUB_WORKSPACE
+
+      - name: Build
+        working-directory: ${{ runner.workspace }}/build
+        run: cmake --build . --parallel -- -k
+
+      - name: Test
+        working-directory: ${{ runner.workspace }}/build
+        run: ctest --output-on-failure

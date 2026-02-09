@@ -1,0 +1,4 @@
+ignore:
+  - "test"
+  - "src/deps"
+  - "include/scn/ranges"
